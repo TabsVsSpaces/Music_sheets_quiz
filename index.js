@@ -1,36 +1,15 @@
 "use strict";
-/*
----------------------------------------------------------------------------------------
- 								* IST NOCH MACARONI CODE *
- --------------------------------------------------------------------------------------
-
-										TODO
-								*Button LösungenText 
-								*Noten anzeigen/Mit Lösungen verbinden
-								*ASYNC Event listeners -> nicht synchron mit fetch
-									-> Hat keine daten, feuert bevor fetch geladen wird
-								*BUG:bei zweitem durchlauf komisches verhalten
-									->beim 1. durchlauf wird 1. Frage doppelt gerendert
-									-> bei folgenden Durchläufen überspringt schleife immer eine indizierung mehr
-										/ verdoppelt die vorherige
-									=> notfix : Seite beim Statistik Screen neuladen
-								*HTML Restrukturierunwqwg von Main
- */
-
 
 function main() {
 	let menu = document.getElementById("main__menu");
 	let quiz = document.getElementById("main__quiz");
-	let form = document.getElementById("menuform");
 	let stat = document.getElementById("main__statistic");
-	let choice = document.getElementById("main__choicebox");
 	let jP = document.getElementById("Jens"); //Span Pseudo-Element für Text der Statistikanzeige
 	let lP = document.getElementById("Wrongs");
 	let progBar = document.getElementById("progress");
-
+	let numRounds = 6; //Anzahl der der Spielrunden
 	let randomChoice = [0, 1, 2, 3];
 	let buttons = ["choiceButton1", "choiceButton2", "choiceButton3", "choiceButton4"];
-
 	let solutionIndex = 0; //Fragen/Antworten-Katalog Index
 	let Correct = 0; //Richtige Antwortenzähler
 
@@ -39,26 +18,59 @@ function main() {
 	//			FETCH JSON
 	//---------------------------
 
+	//AJAX Fetch-API
+	//idefix fkt. nicht bei mobilen Endgeräten
+	//const source = 'https://idefix.informatik.htw-dresden.de/it1/beleg/noten-aufgaben.js';
+	const source = "https://www2.htw-dresden.de/~s77158/Modul1.json";
 
-	//http://idefix.informatik.htw-dresden.de/it1/beleg/noten-aufgaben.js
-	//const tempfetchAddr = 'http://141.56.236.191:8000/Modul1.json';
-	//const fetchAddr = 'http://192.168.0.108:8000/Modul1.json'; //IP Adresse von Hostserver(lokaler Webserver)
-	//Neue AJAX API
-	function fetchRequest(addr, noteType) {
-		fetch(addr).then(response => {
-			return response.json();
-		}).then(data => {
-			//localStorage.setItem("notes", JSON.stringify(data.notes));
-			localStorage.setItem("solution", JSON.stringify(data.solution));
-			insertFirstPage(noteType);
+	function fetchRequest(source, modul, key) {
+		fetch(source)
+			.then(response => { return response.json(); })
+			.catch(error => console.error('Error:', error))
+			.then(data => {
+				if (modul === "note") {
+					localStorage.setItem("questions", JSON.stringify(data.note));
+				}
+				if (modul === "akkord3") {
+					localStorage.setItem("questions", JSON.stringify(data.akkord3));
+				}
+				insertFirstPage(key);
+			})
+	};
 
-		}).catch(err => {
-			// Do something for an error here
-		});
-	}
+	//Start Button
+	document.getElementById("form_button").addEventListener('click', () => {
+		let sel = document.getElementById("menuform").value;
+		let sol = document.getElementById("modulform").value;
+		let nt = 0;
+		let modul;
 
-	//fetchRequest(fetchAddr);
+		if (sel === "Bassschlüssel") {
+			nt = 1;
+		}
+		if (sel === "Violinschlüssel") {
+			nt = 2;
+		}
+		if (sel === "Schlüssel") {
+			document.getElementById("menuform").classList.add("main__choicebox--redLine");
+		}
 
+		if (sol === "Einzelnote") {
+			modul = "note";
+		}
+
+		if (sol === "Akkorde") {
+			modul = "akkord3";
+		}
+
+		if (sol === "Modul") {
+			document.getElementById("modulform").classList.add("main__choicebox--redLine");
+		}
+		if (nt !== 0) {
+			fetchRequest(source, modul, nt);
+		}
+
+	});
 	//---------------------------
 	//		Render Buttons
 	//---------------------------
@@ -76,134 +88,91 @@ function main() {
 		return arra1;
 	}
 
-	randomChoice = shuffle(randomChoice);
-
 	//Rendert Buttontexte zufällig an
 	function randomizeChoiceButtons(buttons, randomDec) {
-		let h = JSON.parse(localStorage.getItem("solution"));
-		let textSelection = ["C", "D", "E", "F", "G", "A", "B", "C'", "C#", "D#", "F#", "A#"];
+		var obj = JSON.parse(localStorage.getItem("questions"));
+		var l = obj[solutionIndex].l;
+		let textSelection = l;
 		textSelection = shuffle(textSelection);
-		let txtSelFilter = textSelection.filter((textSelection) => {
-			return textSelection != h[solutionIndex];
-		});
-		let solution = JSON.parse(localStorage.getItem("solution"));
+
 		let choices = [];
-		choices[0] = solution[solutionIndex];
-		choices[1] = txtSelFilter[0];
-		choices[2] = txtSelFilter[1];
-		choices[3] = txtSelFilter[2];
+		choices[0] = textSelection[0];
+		choices[1] = textSelection[1];
+		choices[2] = textSelection[2];
+		choices[3] = textSelection[3];
 		for (let i = 0; i < buttons.length; ++i) {
 			document.getElementById(buttons[i]).innerHTML = choices[randomDec[i]];
 		}
 	}
 
-
-
-
-
 	//---------------------------
 	//		Note rendering
 	//---------------------------
-	let arraysplit = (strings) => {
 
-		let returnArray = [];
-		let t = strings.split(" ");
-		for (let k = 0; k <= t.length - 1; ++k) {
-			returnArray.push(t[k]);
-		}
-		return returnArray;
-
+	
+	//Benötigt für Umrechnung von Violin auf Bass
+	function setCharAt(str, index, chr) {
+		if (index > str.length - 1) return str;
+		return str.substr(0, index) + chr + str.substr(index + 1);
 	}
-
+	
+	
 	function renderNotes(type) {
 		//Holt sich Clef aus dem Optionsmenü im HTML
-		let noteType;
-		let h = JSON.parse(localStorage.getItem("solution"));
-		let accordArray = [];
-		if (h[solutionIndex].length > 1) {
-			accordArray = arraysplit(h[solutionIndex]);
-		}
-		else {
-			accordArray = h[solutionIndex];
-		}
-		let note = [];
+		let key;
+		var obj = JSON.parse(localStorage.getItem("questions"));
+		var a = obj[solutionIndex].a;
+
+		if (type == 1) { key = 'bass' };
+		if (type == 2) { key = 'treble' };
+
+		var noteString = "";
+		noteString = a;
+
+		//Falls Bass, dann Dekrement z.B. C4 -> C3 !Aufgabenstellung in GitHub ist hier anscheinend falsch
 		if (type == 1) {
-			noteType = "bass"
-			for (let i = 0; i < accordArray.length; ++i) {
-				note[i] = accordArray[i] + "/3";
+			var i;
+			var y = "";
+			for (i = 0; i < noteString.length; i++) {
+				let x = noteString.charAt(i);
+				if (x >= '0' && x <= '9') {
+					y = x - 1;
+					noteString = setCharAt(noteString, i, y);
+				}
 			}
 		}
-		if (type == 2) {
-			noteType = "treble"
-			for (let i = 0; i < accordArray.length; ++i) {
-				note[i] = accordArray[i] + "/5";
-			}
-		}
 
+		var note = noteString + "/w";
 
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~Nachricht für Ben~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-		//-------------------------------------------------------------------------------------------
-		//|				note ist Array der Noten.Dort wo eingestellt wird wie viele					|
-		//|				Noten gerendert werden, muss  es in schleife nach note.length gepackt werden|
-		//-------------------------------------------------------------------------------------------
-		//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		var vf = new Vex.Flow.Factory({ renderer: { elementId: 'VexBody' } });
+		var context = vf.getContext();
+		context.setViewBox(20, 20, 60, 120);
 
+		var score = vf.EasyScore();
+		var system = vf.System();
 
-		var clef = noteType;
+		system.addStave({
+			voices: [score.voice(score.notes(note, { clef: key }))]
+		}).addClef(key);
 
-		//var note = localStorage.getItem("notes"
-		//lokale Definition bis Schnittstelle
-		// Create an SVG renderer and attach it to the DIV element named "boo".
-		var canvas = document.getElementById("VexBody")
-		//var renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
-		var renderer = new Vex.Flow.Renderer(canvas, Vex.Flow.Renderer.Backends.CANVAS);
-
-		// Configure the rendering context.
-		renderer.resize(120, 150); //in CSS class für responsive 100%
-		var context = renderer.getContext();
-		context.setViewBox(20, 20, 85, 85).setFont("Arial", 10, "").setBackgroundFillStyle("#eed");
-
-		// Create a stave of width 400 at position 10, 40 on the canvas.
-		var stave = new Vex.Flow.Stave(20, 20, 100); //Beeiflusst ebenfalls die Groeße
-
-		stave.addClef(clef);//.addTimeSignature("4/4"); 
-		stave.setContext(context).draw();
-		
-		if (note.length == 1) {
-			var notes = [
-				// A whole-note.
-				new Vex.Flow.StaveNote({ clef: clef, keys: [note[0]], duration: "w" })
-			];
-			// Create a voice in 1/1 and add above notes
-			var voice = new Vex.Flow.Voice({ num_beats: 1, beat_value: 1 });
-		}
-		else {
-			var notes = [];
-			for(i=0; i<note.length; i++){
-				notes.push(new Vex.Flow.StaveNote({ clef: clef, keys: [note[i]], duration: "q" }))
-			}
-			var voice = new Vex.Flow.Voice({ num_beats: note.length, beat_value: note.length });
-		}
-		voice.addTickables(notes);
-		var formatter = new Vex.Flow.Formatter().joinVoices([voice]).format([voice], 400);
-		voice.draw(context, stave);
+		vf.draw();
 	}
-
 
 	//---------------------------
 	//		EventListeners
 	//---------------------------
 
 	//Setzt nächsten Rendering Content zusammen/ wechselt zur nächsten Seite & summiert richtige Antworten
-	function handleButton(event, noteType) {
-		let solutionValue = JSON.parse(localStorage.getItem("solution"));
-		let h = JSON.parse(localStorage.getItem("solution"));
+	function handleButton(buttonText, key) {
+		let obj = JSON.parse(localStorage.getItem("questions"));
+		let l = obj[solutionIndex - 1].l;
+		let solution = String(l[0]); //erste Lösung immer richtig
+		let usrInput = String(buttonText);
+
 		let lastPage = () => {
-			jP.innerHTML = "Richtig" + "\n" + Correct + "/4";
-			lP.innerHTML = "Falsch" + "\n" + (4 - Correct) + "/4";
-			//let section ='<section id="main__statistic" class="hidden"><div id="statistic__container"><h2>Dein Ergebnis</h2><span id="Jens" style="text-align: center; font-size: 5rem"></span><button class="statistic__button" id="statistic__button">Zurück zum Menu </button></div></section>'
-			//document.getElementById("main").innerHTML=section;
-			solutionIndex = 0;
+			jP.innerHTML = "Richtig" + "\n" + Correct + "/" + numRounds;
+			lP.innerHTML = "Falsch" + "\n" + (numRounds - Correct) + "/" + numRounds;
+			solutionIndex = 0; //reset
 			quiz.classList.add("hidden");
 			stat.classList.remove("hidden");
 		}
@@ -211,23 +180,25 @@ function main() {
 		let nextPage = () => {
 			randomChoice = shuffle(randomChoice);
 			randomizeChoiceButtons(buttons, randomChoice);
-			progBar.value += 10;
-			renderNotes(noteType);
+			d3.select("svg").remove(); //Verhindert das Aneinanderkleben von SVGs
+			renderNotes(key);
 			solutionIndex += 1;
 
 		}
-		if (event === solutionValue[solutionIndex - 1]) {
-			if (solutionIndex === 4) {
+		//Antowrt richtig
+		if (usrInput === solution) {
+			if (solutionIndex == numRounds) { //Ende des Spiels
 				Correct += 1;
 				lastPage();
 			}
 			else {
-				Correct += 1;
+				Correct += 1; //nächste Runde
+				progBar.value += 100 / numRounds;
 				nextPage();
 			}
-		}
+		}//Antwort falsch
 		else {
-			if (solutionIndex === 4) {
+			if (solutionIndex == numRounds) {
 				lastPage();
 			}
 			else {
@@ -236,74 +207,36 @@ function main() {
 		}
 	}
 
-	function insertFirstPage(noteType) {
-		let section = '<section id="main__quiz" class=""><div class="quiz__progressbox"><progress id="progress" value="00" max="40" class="quiz__progressbar"></progress></div><div class="quiz__renderbody" id="quiz__renderbody"><p style="text-align:center; font-size:2rem;"  id="renderParagraph"></p><canvas id="renderbody"></canvas></div><hr><h2>Wählen sie eine Lösungsmöglichkeit aus</h2><div class="main__choicebox" id="main__choicebox"><button class="choiceButton1" id="choiceButton1">A</button><button class="choiceButton2" id="choiceButton2">B</button><button class="choiceButton3" id="choiceButton3">C</button><button class="choiceButton4" id="choiceButton4">D</button></div></section>'
-		renderNotes(noteType);
-		//document.getElementById("main").innerHTML=section;
+	function insertFirstPage(key) {
+		//let section = '<section id="main__quiz" class=""><div class="quiz__progressbox"><progress id="progress" value="00" max="40" class="quiz__progressbar"></progress></div><div class="quiz__renderbody" id="quiz__renderbody"><p style="text-align:center; font-size:2rem;"  id="renderParagraph"></p><canvas id="renderbody"></canvas></div><hr><h2>Wählen sie eine Lösungsmöglichkeit aus</h2><div class="main__choicebox" id="main__choicebox"><button class="choiceButton1" id="choiceButton1">A</button><button class="choiceButton2" id="choiceButton2">B</button><button class="choiceButton3" id="choiceButton3">C</button><button class="choiceButton4" id="choiceButton4">D</button></div></section>'
+		renderNotes(key);
 		menu.classList.add("hidden");
 		quiz.classList.remove("hidden");
-		//renderRenderbody(solutionIndex);
 		randomizeChoiceButtons(buttons, randomChoice);
-		responseButtons(noteType);
+		responseButtons(key);
 		solutionIndex += 1;
-
 	}
-	function executeFetch(nt, modul) {
-		const htwAddr = ["https://www2.htw-dresden.de/~s77158/Modul1.json",
-			"https://www2.htw-dresden.de/~s77158/Modul2.json",
-			"https://www2.htw-dresden.de/~s77158/Modul3.json"];
-		for (let i = 0; i <= 3; ++i) {
-			if (modul === "Modul" + i) {
-				fetchRequest(htwAddr[i], nt);
-			}
-		}
-	}
-	//fect('http://192.168.0.108:8000/Modul2.json');
-	//Start Button
-	document.getElementById("form_button").addEventListener('click', () => {
-		let sel = document.getElementById("menuform").value;
-		let sol = document.getElementById("modulform").value;
-		let nt = 0;
-
-		if (sel === "Bassschlüssel") {
-			nt = 1;
-		}
-		if (sel === "Violinschlüssel") {
-			nt = 2;
-		}
-		if (sel === "Notenart") {
-			document.getElementById("menuform").classList.add("main__choicebox--redLine");
-		}
-		if (sol === "Modul") {
-			document.getElementById("modulform").classList.add("main__choicebox--redLine");
-		}
-		if (nt !== 0) {
-			executeFetch(nt, sol);
-		}
-
-	});
-
 
 	// Quiz Buttons
-	function responseButtons(noteType) {
+	function responseButtons(key) {
 		document.getElementById("main__choicebox").addEventListener('click', function (event) {
 			let elem = event.target.id;
 
 			if (elem === buttons[0]) {
 				let buttonText = document.getElementById(buttons[0]).innerHTML;
-				handleButton(buttonText, noteType);
+				handleButton(buttonText, key);
 			}
 			if (elem === buttons[1]) {
 				let buttonText = document.getElementById(buttons[1]).innerHTML;
-				handleButton(buttonText, noteType);
+				handleButton(buttonText, key);
 			}
 			if (elem === buttons[2]) {
 				let buttonText = document.getElementById(buttons[2]).innerHTML;
-				handleButton(buttonText, noteType);
+				handleButton(buttonText, key);
 			}
 			if (elem === buttons[3]) {
 				let buttonText = document.getElementById(buttons[3]).innerHTML;
-				handleButton(buttonText, noteType);
+				handleButton(buttonText, key);
 			}
 		});
 	}
@@ -312,30 +245,5 @@ function main() {
 main();
 //Restart Button
 document.getElementById("statistic__button").addEventListener('click', () => {
-	/*menu.classList.remove("hidden");
-	stat.classList.add("hidden");
-	form.value="Modul";
-	form.classList.remove("main__choicebox--redLine");
-	solutionIndex=0;
-	Correct=0;
-	progBar.value="0";*/
 	main();
 });
-
-/*
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/sw.js').then(function(registration) {
-      // Registration was successful
-      console.log('ServiceWorker registration successful with scope: ', registration.scope);
-    }, function(err) {
-      // registration failed :(
-      console.log('ServiceWorker registration failed: ', err);
-    });
-  });
-}
-*/
-
-
-
-
